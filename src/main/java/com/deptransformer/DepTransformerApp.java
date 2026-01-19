@@ -32,34 +32,34 @@ public class DepTransformerApp {
   private static final int PROGAVAL_VALUE = 2;
 
   private static final List<String> DEP_COLUMNS = Arrays.asList(
-      "IGe",
-      "ACC_IGe",
-      "DIPP",
-      "ACC_DIPP",
-      "DPE365",
-      "ACC_DPE365",
-      "DPE450",
-      "ACC_DPE450",
-      "DPN",
-      "ACC_DPN",
-      "MP120",
-      "ACC_MP120",
-      "MP210",
-      "ACC_MP210",
-      "DP120",
-      "ACC_DP120",
-      "DP210",
-      "ACC_DP210",
-      "DP365",
-      "ACC_DP365",
-      "DP450",
-      "ACC_DP450",
-      "DPAC",
-      "ACC_DPAC"
+      "IGE",
+      "DEPD_IPP",
+      "ACD_IPP",
+      "DEPD_PE365",
+      "ACD_PE365",
+      "DEPD_PE450",
+      "ACD_PE450",
+      "DEPD_PN",
+      "ACD_PN",
+      "DEPM_P120",
+      "ACM_P120",
+      "DEPM_P210",
+      "ACM_P210",
+      "DEPD_P120",
+      "ACD_P120",
+      "DEPD_P210",
+      "ACD_P210",
+      "DEPD_P365",
+      "ACD_P365",
+      "DEPD_P450",
+      "ACD_P450",
+      "DEPD_PAC",
+      "ACD_PAC"
   );
 
   private static final List<String> VALUE_COLUMNS = Arrays.asList(
       "IGe",
+      "MGTe",
       "DIPP",
       "DPE365",
       "DPE450",
@@ -163,13 +163,17 @@ public class DepTransformerApp {
     Path csvPath = requirePath(flags, "--csv");
     Path depPath = requirePath(flags, "--dep");
     Path descdepPath = requirePath(flags, "--descdep");
+    boolean append = Boolean.parseBoolean(flags.getOrDefault("--append", "false"));
 
     ensureDescdepEntries(descdepPath);
 
     Map<String, Integer> codigos = loadCodigoDep(descdepPath);
     DBFField[] depFields = readFields(depPath);
-    //List<Object[]> existingRecords = readAllRecords(depPath);
+
     List<Object[]> existingRecords = new ArrayList<>();
+    if (append) {
+      existingRecords = readAllRecords(depPath);
+    }
 
     int inserted = 0;
     try (CSVParser parser = CSVParser.parse(
@@ -178,15 +182,31 @@ public class DepTransformerApp {
       for (CSVRecord record : parser) {
         String animal = buildAnimalId(record.get("Série"), record.get("RGN"));
         for (String valueColumn : VALUE_COLUMNS) {
+
+          String dbfColumn = "DEP" + valueColumn.toUpperCase();
+          dbfColumn = dbfColumn.substring(0, 4) + "_" + dbfColumn.substring(4);
+
           String accuracyColumn = "ACC_" + valueColumn;
-          String rawValue = record.get(valueColumn);
+          String dbfAccuracyColumn = dbfColumn.replace("DEP", "AC");
+
+          if ("MGTe".equals(valueColumn)) {
+            dbfColumn = "MGT";
+            dbfAccuracyColumn = "ACM_GT";
+          }
+          if ("IGe".equals(valueColumn)) {
+            dbfColumn = "IGE";
+            dbfAccuracyColumn = "ACI_GE";
+          }
+
+          String rawValue;
+          try { rawValue = record.get(valueColumn); } catch (Exception ex) { continue; }
           if (rawValue == null || rawValue.trim().isEmpty()) {
             continue;
           }
           Double value = parseDouble(rawValue);
           Double accuracy = parseDouble(record.get(accuracyColumn));
 
-          Integer codigoDep = codigos.get(valueColumn);
+          Integer codigoDep = codigos.get(dbfColumn);
           if (codigoDep == null) {
             throw new IllegalStateException("CODIGODEP ausente para coluna: " + valueColumn);
           }
@@ -208,6 +228,7 @@ public class DepTransformerApp {
       for (Object[] row : existingRecords) {
         writer.addRecord(row);
       }
+      writer.close();
     }
 
     System.out.println("Registros inseridos: " + inserted);
@@ -236,6 +257,9 @@ public class DepTransformerApp {
     int nextCodigo = maxCodigo + 1;
 
     for (String column : DEP_COLUMNS) {
+      //String dbfColumn = "DEP" + column;
+      //dbfColumn = dbfColumn.substring(0, 4) + "_" + dbfColumn.substring(4);
+
       if (byDescdep.containsKey(column)) {
         continue;
       }
@@ -273,12 +297,15 @@ public class DepTransformerApp {
     }
 
     existingRecords.addAll(newRecords);
+    //Path newFilePath = Path.of("new-" + descdepPath.getFileName().toString());
+
     try (OutputStream outputStream = new BufferedOutputStream(Files.newOutputStream(descdepPath))) {
       DBFWriter writer = new DBFWriter(outputStream, DBF_CHARSET);
       writer.setFields(fields);
       for (Object[] record : existingRecords) {
         writer.addRecord(record);
       }
+      writer.close();
     }
   }
 

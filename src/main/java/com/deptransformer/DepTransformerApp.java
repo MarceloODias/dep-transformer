@@ -105,6 +105,7 @@ public class DepTransformerApp {
     Path dbfPath = requirePath(flags, "--dbf");
     int limit = parseInt(flags.getOrDefault("--limit", "50"));
     int offset = parseInt(flags.getOrDefault("--offset", "0"));
+    String search = flags.getOrDefault("--search", null);
 
     try (BufferedInputStream inputStream = new BufferedInputStream(Files.newInputStream(dbfPath))) {
       DBFReader reader = new DBFReader(inputStream);
@@ -123,6 +124,12 @@ public class DepTransformerApp {
           String line = Arrays.stream(row)
               .map(value -> Objects.toString(value, ""))
               .collect(Collectors.joining(", "));
+
+          if (search != null && !line.contains(search)) {
+            index++;
+            continue;
+          }
+
           System.out.println(String.format("%d: %s", index, line));
         }
         index++;
@@ -161,7 +168,8 @@ public class DepTransformerApp {
 
     Map<String, Integer> codigos = loadCodigoDep(descdepPath);
     DBFField[] depFields = readFields(depPath);
-    List<Object[]> existingRecords = readAllRecords(depPath);
+    //List<Object[]> existingRecords = readAllRecords(depPath);
+    List<Object[]> existingRecords = new ArrayList<>();
 
     int inserted = 0;
     try (CSVParser parser = CSVParser.parse(
@@ -326,7 +334,7 @@ public class DepTransformerApp {
     String paddedDigits = digits.length() >= 4
         ? digits
         : String.format("%04d", Integer.parseInt(digits));
-    return prefix + paddedDigits;
+    return prefix + " " + paddedDigits;
   }
 
   private static DBFField[] readFields(Path dbfPath) throws IOException {
